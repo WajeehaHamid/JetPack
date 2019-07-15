@@ -68,6 +68,7 @@ BASE_PROJECT_NAME=$(get_value base_project_name)
 BASE_USER_NAME=$(get_value base_user_name)
 BASE_CONTAINER_NAME=$(get_value base_container_name)
 SRIOV_ENABLED=$(get_value_lower sriov_enabled)
+SMART_NIC_ENABLED=$(get_value_lower smart_nic_enabled)
 HPG_ENABLED=$(get_value_lower hugepages_enabled)
 NUMA_ENABLED=$(get_value_lower numa_enabled)
 
@@ -407,8 +408,11 @@ setup_glance(){
 sriov_port_creation(){
   #Creating ports in the tenant scope
   set_tenant_scope
-
-  execute_command "openstack port create --network $TENANT_NETWORK_NAME --vnic-type direct $sriov_port_name"
+  if [ "$SMART_NIC_ENABLED" != false ];then
+    execute_command "openstack port create --network $TENANT_NETWORK_NAME --vnic-type direct $sriov_port_name --binding-profile capabilities=switchdev"
+  else
+    execute_command "openstack port create --network $TENANT_NETWORK_NAME --vnic-type direct $sriov_port_name"
+  fi
 }
 
 spin_up_instances(){
@@ -866,7 +870,7 @@ setup_project(){
   then
     execute_command "openstack project create $PROJECT_NAME"
     execute_command "openstack user create --project $PROJECT_NAME --password $SANITY_USER_PASSWORD --email $SANITY_USER_EMAIL $USER_NAME"
-    execute_command "openstack role add --project $PROJECT_NAME --user $USER_NAME member"
+    execute_command "openstack role add --project $PROJECT_NAME --user $USER_NAME admin"
   else
     info "#Project $PROJECT_NAME exists ---- Skipping"
   fi
