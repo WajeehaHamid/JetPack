@@ -162,12 +162,25 @@ class Director(InfraHost):
             self.upload_file(source_file, dest_file)
 
     def install_director(self):
-        logger.debug("Installing the undercloud")
-        cmd = '~/pilot/install-director.sh --dns ' + \
-              self.settings.name_server + " --sm_user " + \
-              self.settings.subscription_manager_user + " --sm_pwd " + \
-              self.settings.subscription_manager_password + " --sm_pool " + \
-              self.settings.subscription_manager_vm_ceph
+        logger.info("Installing the undercloud")
+        if self.settings.use_satellite:
+            cmd = '~/pilot/install-director.sh --dns ' + \
+                  self.settings.name_server + ' --satellite_hostname ' + \
+                  self.settings.satellite_hostname + ' --satellite_org ' + \
+                  self.settings.satellite_org + ' --satellite_key ' + \
+                  self.settings.satellite_activation_key
+            if self.settings.pull_containers_from_satellite is True:
+                cmd += " --containers_prefix " + self.settings.containers_prefix
+        else:
+            cmd = '~/pilot/install-director.sh --dns ' + \
+                  self.settings.name_server + \
+                  " --sm_user " + \
+                  self.settings.subscription_manager_user + \
+                  " --sm_pwd " + \
+                  self.settings.subscription_manager_password + \
+                  " --sm_pool " + \
+                  self.settings.subscription_manager_vm_ceph
+
         if len(self.settings.overcloud_nodes_pwd) > 0:
             cmd += " --nodes_pwd " + self.settings.overcloud_nodes_pwd
         stdout, stderr, exit_status = self.run(cmd)
@@ -191,7 +204,7 @@ class Director(InfraHost):
             self.upload_file(self.settings.overcloud_image,
                              self.images_dir + "/overcloud-full.tar")
         else:
-            logger.info("will pull images from the cdn")
+            pass
 
     def node_discovery(self):
         setts = self.settings
@@ -476,8 +489,8 @@ class Director(InfraHost):
         # Pull down the auto-generated OSD config file from the director
         local_file = self.settings.ceph_osd_config_yaml + '.director'
         remote_file = os.path.join('/home',
-           self.settings.director_install_account_user,
-           Settings.CEPH_OSD_CONFIG_FILE)
+                                   self.settings.director_install_account_user,
+                                   Settings.CEPH_OSD_CONFIG_FILE)
         self.download_file(local_file, remote_file)
 
         # Calculate the number of OSDs across the entire cluster
@@ -875,7 +888,7 @@ class Director(InfraHost):
 
         overcloud_images_file = self.home_dir + "/overcloud_images.yaml"
         manila_container = "/dellemc/openstack-manila-share-dellemc:" + \
-             self.settings.manila_unity_container_version
+                           self.settings.manila_unity_container_version
         remote_registry = "registry.connect.redhat.com"
         remote_url = remote_registry + manila_container
         local_registry = self.provisioning_ip + ":8787"
@@ -1224,6 +1237,11 @@ class Director(InfraHost):
             cmds.append('sed -i -r \'s/(^\s*' + setting_name +    # noqa: W605
                         ':\s*).*/\\1' + setting_value + '/\' ' + remote_file)
 
+        # if smart NICs are used then use smart configuration for contoller and compute nodes
+        if self.settings.enable_smart_nic == True:
+            cmds.append('sed -i s/controller.yaml/controller_smart.yaml/' + remote_file)
+            cmds.append('sed -i s/dellcompute_sriov.yaml/dellcompute_sriov_smart.yaml/' + remote_file)
+
         # Execute the commands
         for cmd in cmds:
             self.run(cmd)
@@ -1253,15 +1271,33 @@ class Director(InfraHost):
         sriov_map_setting = []
         sriov_pci_passthrough = []
         physical_network = "physint"
+        physical_network1 = "tenant1"
+        physical_network2 = "tenant2"
+        check = 1
         for interface in sriov_interfaces:
             devname = interface
-            mapping = physical_network + ':' + interface
+            if self.settings.enable_smart_nic == True:
+                if check == 1:
+                    mapping = physical_network1 + ':' + interface
+                    nova_pci = '{devname: ' + \
+                               '"' + interface + '",' + \
+                               'physical_network: ' + \
+                               '"' + physical_network1 + '"}'
+                elif check == 2:
+                    mapping = physical_network2 + ':' + interface
+                    nova_pci = '{devname: ' + \
+                               '"' + interface + '",' + \
+                               'physical_network: ' + \
+                               '"' + physical_network1 + '"}'
+            else:
+                mapping = physical_network + ':' + interface
+                nova_pci = '{devname: ' + \
+                           '"' + interface + '",' + \
+                           'physical_network: ' + \
+                           '"' + physical_network + '"}'                
+            
             sriov_map_setting.append(mapping)
-
-            nova_pci = '{devname: ' + \
-                       '"' + interface + '",' + \
-                       'physical_network: ' + \
-                       '"' + physical_network + '"}'
+        
             sriov_pci_passthrough.append(nova_pci)
 
             interface = interface + ':' + \
@@ -1338,6 +1374,8 @@ class Director(InfraHost):
             cmd += " --sriov"
         if self.settings.dvr_enable is True:
             cmd += " --dvr_enable"
+        if self.settings.barbican_enable is True:
+            cmd += " --barbican_enable"
         if self.settings.octavia_enable is True:
             cmd += " --octavia_enable"
         if self.settings.octavia_user_certs_keys is True:
@@ -1721,15 +1759,35 @@ class Director(InfraHost):
         logger.info("Configure Dashboard")
         ip = self.settings.dashboard_node.public_api_ip
 
-        self.run_tty(self.source_stackrc + 'cd ' +
-                     self.pilot_dir +
-                     ';./config_dashboard.py ' +
-                     ip +
-                     ' ' + self.settings.dashboard_node.root_password +
-                     ' ' + self.settings.subscription_manager_user +
-                     ' ' + self.settings.subscription_manager_password +
-                     ' ' + self.settings.subscription_manager_pool_sah +
-                     ' ' + self.settings.subscription_manager_vm_ceph)
+        if self.settings.use_satellite is True:
+            self.run_tty(self.source_stackrc + 'cd ' +
+                         self.pilot_dir +
+                         ';./config_dashboard.py --dashboard_addr ' +
+                         ip + ' --dashboard_pass ' +
+                         self.settings.dashboard_node.root_password +
+                         ' --satOrg ' +
+                         self.settings.satellite_org +
+                         ' --satKey ' +
+                         self.settings.satellite_activation_key +
+                         ' --physId ' +
+                         self.settings.subscription_manager_pool_sah +
+                         ' --cephId ' +
+                         self.settings.subscription_manager_vm_ceph)
+        else:
+            self.run_tty(self.source_stackrc + 'cd ' +
+                         self.pilot_dir +
+                         ';./config_dashboard.py --dashboard_addr ' +
+                         ip +
+                         ' --dashboard_pass ' +
+                         self.settings.dashboard_node.root_password +
+                         ' --sbUser ' +
+                         self.settings.subscription_manager_user +
+                         ' --subPass ' +
+                         self.settings.subscription_manager_password +
+                         ' --physId ' +
+                         self.settings.subscription_manager_pool_sah +
+                         ' --cephId ' +
+                         self.settings.subscription_manager_vm_ceph)
 
     def enable_fencing(self):
         if self.settings.enable_fencing is True:

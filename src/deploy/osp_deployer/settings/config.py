@@ -236,6 +236,19 @@ class Settings():
                 'subscription_check_retries']
         else:
             self.subscription_check_retries = 20
+        if rhsm_settings['use_satellite'].lower() == 'true':
+            self.use_satellite = True
+            self.satellite_ip = rhsm_settings['satellite_ip']
+            self.satellite_hostname = rhsm_settings['satellite_hostname']
+            self.satellite_org = rhsm_settings['satellite_org']
+            self.satellite_activation_key = rhsm_settings['satellite_activation_key']
+            if rhsm_settings['pull_containers_from_satellite'].lower() == 'true':
+                self.pull_containers_from_satellite = True
+                self.containers_prefix = rhsm_settings['containers_prefix']
+            else:
+                self.pull_containers_from_satellite = False
+        else:
+            self.use_satellite = False
 
         ipmi_settings = self.get_settings_section(
             "IPMI credentials Settings")
@@ -304,6 +317,12 @@ class Settings():
         else:
             self.dvr_enable = False
             logger.info("DVR is disabled.")
+        if dellnfv_settings['barbican_enable'].lower() == 'true':
+            self.barbican_enable = True
+            logger.info("Barbican is enabled.")
+        else:
+            self.barbican_enable = False
+            logger.info("Barbican is disabled.")
         if dellnfv_settings['octavia_enable'].lower() == 'true':
             self.octavia_enable = True
             logger.info("Octavia is enabled.")
@@ -564,10 +583,11 @@ class Settings():
             if 'HostNicDriver' in nics_settings:
                 self.HostNicDriver = nics_settings['HostNicDriver']
 
-
         # TO enable SRIOV
         self.sriov_enable = dellnfv_settings['sriov_enable']
+        self.smart_nic = dellnfv_settings['smart_nic']
         self.enable_sriov = False
+        self.enable_smart_nic = False
         if self.sriov_enable.lower() == 'false':
             pass
         else:
@@ -578,6 +598,12 @@ class Settings():
             logger.info("SR-IOV is enabled.")
         else:
             logger.info("SR-IOV is disabled.")
+
+        if self.smart_nic.lower() == 'true':
+            self.enable_smart_nic = True
+            logger.info("Smart NIC for SR-IOV Hardware Offload is enabled.")
+        else:
+            logger.info("Smart NIC for SR-IOV Hardware Offload is disabled.")
 
         self.controller_nodes = []
         self.compute_nodes = []

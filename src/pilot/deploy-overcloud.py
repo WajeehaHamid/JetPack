@@ -354,6 +354,10 @@ def main():
                             action='store_true',
                             default=False,
                             help="Enables Distributed Virtual Routing")
+        parser.add_argument('--barbican_enable',
+                            action='store_true',
+                            default=False,
+                            help="Enables Barbican key manager")
         parser.add_argument('--static_ips',
                             action='store_true',
                             default=False,
@@ -370,6 +374,10 @@ def main():
                             action='store_true',
                             default=False,
                             help="Enable SR-IOV")
+        parser.add_argument('--hw_offload',
+                            action='store_true',
+                            default=False,
+                            help="Enable SR-IOV Offload")
         parser.add_argument('--node_placement',
                             action='store_true',
                             default=False,
@@ -505,6 +513,11 @@ def main():
         if args.dvr_enable:
             env_opts += " -e ~/pilot/templates/neutron-ovs-dvr.yaml"
 
+        # The configure-barbican.yaml must be included after the
+        # network-environment.yaml
+        if args.barbican_enable:
+            env_opts += " -e ~/pilot/templates/configure-barbican.yaml"
+
         # The octavia.yaml must be included after the
         # network-environment.yaml
         if args.octavia_enable:
@@ -530,13 +543,15 @@ def main():
             host_config = True
         if args.ovs_dpdk:
             if not args.enable_hugepages or not args.enable_numa:
-                    raise ValueError("Both hugepages and numa must be" +
-                                     "enabled in order to use OVS-DPDK")
+                raise ValueError("Both hugepages and numa must be" +
+                                 "enabled in order to use OVS-DPDK")
             else:
                 env_opts += " -e ~/pilot/templates/neutron-ovs-dpdk.yaml"
 
         if args.sriov:
             env_opts += " -e ~/pilot/templates/neutron-sriov.yaml"
+            if args.hw_offload:
+                env_opts += " -e ~/pilot/templates/ovs-hw-offload.yaml"
             if not host_config:
                 env_opts += " -e ~/pilot/templates/overcloud/environments/" \
                             "host-config-and-reboot.yaml"

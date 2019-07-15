@@ -42,6 +42,12 @@
                    "false"
                 ]
              },
+            "smart_nic": {
+                "valid_values": [
+                   "true",
+                   "false"
+                ]
+             },
             "sriov_vf_count": {
                 "validate": [
                   "should_be_valid_int"
@@ -63,6 +69,12 @@
               ]
              },
             "dvr_enable" :{
+              "valid_values": [
+                 "true",
+                 "false"
+              ]
+            },
+            "barbican_enable" :{
               "valid_values": [
                  "true",
                  "false"
@@ -218,6 +230,19 @@
             },
          "enable_fencing":""
          }
+      },
+      {
+       "Subscription Manager Settings":{
+            "use_satellite" : {
+                  "valid_values": [
+                  "true",
+                  "false"
+               ],
+            "validate": [
+                  "should_be_valid_ip"
+               ]
+        }
+       }
       },
       {
          "Advanced Settings":{
